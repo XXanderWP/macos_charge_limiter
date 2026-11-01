@@ -1,0 +1,38 @@
+#!/bin/bash
+# Runs as root from launchd every 60s and whenever the config dir changes.
+# Keeps the battery between (MAX - 5)% and MAX% using SMC keys:
+#   CHTE 01000000 = inhibit charging, 00000000 = allow charging
+#   CHIE 08       = run from battery even with the adapter attached, 00 = normal
+SMC="@BIN@/smc"
+DIR="@CONFIG_DIR@"
+
+MAX=$(cat "$DIR/max" 2>/dev/null)
+[[ "$MAX" =~ ^[0-9]+$ ]] && (( MAX >= 50 && MAX <= 95 )) || MAX=80
+MIN=$(( MAX - 5 ))
+
+pct=$(pmset -g batt | grep -Eo '[0-9]+%' | head -1 | tr -d %)
+[[ -n "$pct" ]] || exit 0
+
+read_key() { "$SMC" -k "$1" -r | grep -Eo 'bytes [0-9a-f ]+' | tr -d ' ' | sed 's/bytes//'; }
+chte=$(read_key CHTE)
+chie=$(read_key CHIE)
+
+# On a threshold change decide from scratch instead of keeping the hysteresis state
+STATE=/var/run/charge-limit.max
+last=$(cat "$STATE" 2>/dev/null)
+echo "$MAX" > "$STATE"
+
+want_chte=$chte
+want_chie=00
+if [[ -f "$DIR/on" ]]; then
+  if (( pct >= MAX )); then want_chte=01000000
+  elif (( pct < MIN )) || [[ "$last" != "$MAX" ]]; then want_chte=00000000
+  fi
+  [[ -f "$DIR/discharge" ]] && (( pct > MAX )) && want_chie=08
+else
+  want_chte=00000000
+fi
+
+[[ "$want_chte" != "$chte" ]] && "$SMC" -k CHTE -w "$want_chte"
+[[ "$want_chie" != "$chie" ]] && "$SMC" -k CHIE -w "$want_chie"
+exit 0

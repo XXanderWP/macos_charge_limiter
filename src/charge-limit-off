@@ -1,0 +1,3 @@
+#!/bin/bash
+# Usage: charge-limit-off   disable the limit and charge to 100%
+rm -f "@CONFIG_DIR@/on" && echo "Charge limit: OFF (charging to 100%)"

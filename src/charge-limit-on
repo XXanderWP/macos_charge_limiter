@@ -1,0 +1,10 @@
+#!/bin/bash
+# Usage: charge-limit-on [N]   enable the limit, optionally set it to N% (50-95)
+DIR="@CONFIG_DIR@"
+mkdir -p "$DIR"
+if [[ -n "$1" ]]; then
+  [[ "$1" =~ ^[0-9]+$ ]] && (( $1 >= 50 && $1 <= 95 )) || { echo "Limit must be 50-95"; exit 1; }
+  echo "$1" > "$DIR/max"
+fi
+touch "$DIR/on"
+echo "Charge limit $(cat "$DIR/max" 2>/dev/null || echo 80)%: ON"

@@ -1,0 +1,10 @@
+#!/bin/bash
+# Usage: charge-limit-discharge on|off
+# When on, the battery is discharged down to the limit even with the adapter attached.
+DIR="@CONFIG_DIR@"
+mkdir -p "$DIR"
+case "$1" in
+  on)  touch "$DIR/discharge"; echo "Discharge to limit: ON" ;;
+  off) rm -f "$DIR/discharge"; echo "Discharge to limit: OFF" ;;
+  *)   [[ -f "$DIR/discharge" ]] && echo "Discharge to limit: ON" || echo "Discharge to limit: OFF" ;;
+esac

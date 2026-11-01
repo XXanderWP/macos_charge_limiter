@@ -1,0 +1,13 @@
+#!/bin/bash
+# Usage: charge-limit-status
+DIR="@CONFIG_DIR@"
+SMC="@BIN@/smc"
+max=$(cat "$DIR/max" 2>/dev/null || echo 80)
+[[ -f "$DIR/on" ]] && echo "Limit: ON ($((max-5))-${max}%)" || echo "Limit: OFF (${max}% when on)"
+[[ -f "$DIR/discharge" ]] && echo "Discharge to limit: ON" || echo "Discharge to limit: OFF"
+chte=$("$SMC" -k CHTE -r | grep -Eo 'bytes [0-9a-f ]+')
+chie=$("$SMC" -k CHIE -r | grep -Eo 'bytes [0-9a-f ]+')
+if [[ "$chie" != "bytes 00" ]]; then echo "Charging: discharging to limit"
+elif [[ "$chte" == "bytes 00 00 00 00" ]]; then echo "Charging: allowed"
+else echo "Charging: inhibited"; fi
+pmset -g batt | grep -Eo '[0-9]+%.*'
