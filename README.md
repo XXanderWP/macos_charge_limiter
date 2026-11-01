@@ -74,7 +74,7 @@ None of these need `sudo`.
 
 The menu shows the current state, an on/off toggle, a **Charge limit** submenu (50–95%) and a **Discharge to limit** toggle.
 
-It also shows live electrical readings (from `ioreg`, refreshed when the menu opens). `charge-limit-status` prints the same:
+It also shows electrical readings from `ioreg`, refreshed every 30 seconds and each time the menu opens. `charge-limit-status` prints the same:
 
 - **Adapter**: negotiated USB-C power profile, e.g. `65 W (20 V)` (only when plugged in)
 - **Input**: actual voltage, current and power drawn from the adapter (only when plugged in)
