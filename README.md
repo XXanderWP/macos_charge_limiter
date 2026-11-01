@@ -24,6 +24,16 @@ A root launch daemon checks the battery every 60 seconds (and right away when yo
 
 ## Install
 
+One line, with the menu bar plugin:
+
+```bash
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/XXanderWP/macos_charge_limiter/main/install.sh)" -- --swiftbar
+```
+
+Without the plugin, drop `-- --swiftbar`. The script downloads the latest version of the repository to a temporary folder, installs it and cleans up.
+
+Or from a clone:
+
 ```bash
 git clone https://github.com/XXanderWP/macos_charge_limiter.git
 cd macos_charge_limiter
@@ -37,7 +47,7 @@ Options:
 
 The limit is enabled right after install and survives reboots. If you use the menu bar plugin, turn on **Launch at Login** in SwiftBar preferences (or add SwiftBar in System Settings → General → Login Items).
 
-To update, `git pull` and run `./install.sh` again.
+To update, run the one-line command again (or `git pull && ./install.sh`). Your settings are kept.
 
 ## Usage
 

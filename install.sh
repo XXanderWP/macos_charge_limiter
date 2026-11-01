@@ -3,9 +3,24 @@
 # Usage: ./install.sh [--swiftbar] [--limit N]
 #   --swiftbar  also install SwiftBar (via Homebrew) and the menu bar plugin
 #   --limit N   initial charge limit, 50-95 (default 80)
+# One-line install (downloads the latest version from GitHub):
+#   bash -c "$(curl -fsSL https://raw.githubusercontent.com/XXanderWP/macos_charge_limiter/main/install.sh)" -- --swiftbar
 set -euo pipefail
 
-cd "$(dirname "$0")"
+TARBALL="${CHARGE_LIMITER_TARBALL:-https://github.com/XXanderWP/macos_charge_limiter/archive/refs/heads/main.tar.gz}"
+
+# Run through curl: no repo next to the script, so fetch it and re-run from there
+SCRIPT_DIR=""
+[[ -f "${BASH_SOURCE[0]:-}" ]] && SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+if [[ ! -f "$SCRIPT_DIR/src/charge-limit-daemon" ]]; then
+  tmp=$(mktemp -d)
+  trap 'rm -rf "$tmp"' EXIT
+  echo "==> Downloading macOS Charge Limiter"
+  curl -fsSL "$TARBALL" | tar -xz -C "$tmp" --strip-components 1
+  bash "$tmp/install.sh" "$@"
+  exit $?
+fi
+cd "$SCRIPT_DIR"
 
 BIN=/usr/local/bin
 CONFIG_DIR="$HOME/.charge-limit"
@@ -21,7 +36,7 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --swiftbar) WITH_SWIFTBAR=1 ;;
     --limit) LIMIT="${2:-}"; shift ;;
-    -h|--help) sed -n '2,5p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,7p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "Unknown option: $1"; exit 1 ;;
   esac
   shift
