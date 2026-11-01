@@ -1,10 +1,11 @@
 #!/bin/bash
 # Installs macOS Charge Limiter.
-# Usage: ./install.sh [--swiftbar] [--limit N]
-#   --swiftbar  also install SwiftBar (via Homebrew) and the menu bar plugin
+# Usage: ./install.sh [--limit N] [--build] [--no-app]
 #   --limit N   initial charge limit, 50-95 (default 80)
+#   --build     build the menu bar app from source instead of downloading the release
+#   --no-app    only install the daemon and terminal commands
 # One-line install (downloads the latest version from GitHub):
-#   bash -c "$(curl -fsSL https://raw.githubusercontent.com/XXanderWP/macos_charge_limiter/main/install.sh)" -- --swiftbar
+#   bash -c "$(curl -fsSL https://raw.githubusercontent.com/XXanderWP/macos_charge_limiter/main/install.sh)"
 set -euo pipefail
 
 TARBALL="${CHARGE_LIMITER_TARBALL:-https://github.com/XXanderWP/macos_charge_limiter/archive/refs/heads/main.tar.gz}"
@@ -28,15 +29,21 @@ LABEL=io.github.xxanderwp.charge-limiter
 PLIST=/Library/LaunchDaemons/$LABEL.plist
 LEGACY_PLIST=/Library/LaunchDaemons/local.charge-limit.plist
 SMC_APP=/Applications/smcFanControl.app/Contents/Resources/smc
-SWIFTBAR_DIR="$HOME/.swiftbar"
+APP=/Applications/ChargeLimiter.app
+APP_LABEL=io.github.xxanderwp.charge-limiter.app
+AGENT="$HOME/Library/LaunchAgents/$APP_LABEL.plist"
+RELEASE_ZIP=https://github.com/XXanderWP/macos_charge_limiter/releases/latest/download/ChargeLimiter.zip
 
-WITH_SWIFTBAR=0
+WITH_APP=1
+BUILD=0
 LIMIT=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --swiftbar) WITH_SWIFTBAR=1 ;;
     --limit) LIMIT="${2:-}"; shift ;;
-    -h|--help) sed -n '2,7p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    --build) BUILD=1 ;;
+    --no-app) WITH_APP=0 ;;
+    --swiftbar) ;;  # obsolete, the menu bar app replaced the SwiftBar plugin
+    -h|--help) sed -n '2,8p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "Unknown option: $1"; exit 1 ;;
   esac
   shift
@@ -92,23 +99,39 @@ else
   "$BIN/charge-limit-on"
 fi
 
-if [[ $WITH_SWIFTBAR -eq 1 ]]; then
-  step "Installing SwiftBar plugin"
-  if [[ ! -d /Applications/SwiftBar.app ]]; then
-    command -v brew >/dev/null || die "Homebrew not found, install SwiftBar manually."
-    brew install --cask swiftbar
-  fi
-  current=$(defaults read com.ameba.SwiftBar PluginDirectory 2>/dev/null || true)
-  if [[ -n "$current" ]]; then
-    SWIFTBAR_DIR="${current/#\~/$HOME}"
+# Leftovers of the SwiftBar plugin from older versions
+swiftbar_dir=$(defaults read com.ameba.SwiftBar PluginDirectory 2>/dev/null || echo "$HOME/.swiftbar")
+rm -f "${swiftbar_dir/#\~/$HOME}"/charge-limit*.sh
+
+if [[ $WITH_APP -eq 1 ]]; then
+  step "Installing menu bar app"
+  stage=$(mktemp -d)
+  if [[ $BUILD -eq 0 ]] && curl -fsSL -o "$stage/app.zip" "$RELEASE_ZIP" 2>/dev/null; then
+    ditto -x -k "$stage/app.zip" "$stage"
+    echo "Downloaded the latest release."
   else
-    defaults write com.ameba.SwiftBar PluginDirectory "$SWIFTBAR_DIR"
+    [[ $BUILD -eq 1 ]] || echo "No release available, building from source."
+    version=$(git describe --tags --always 2>/dev/null || echo dev)
+    app/build.sh "${version#v}" "$stage"
   fi
-  mkdir -p "$SWIFTBAR_DIR"
-  install -m 755 swiftbar/charge-limit.30s.sh "$SWIFTBAR_DIR/"
-  open -g -a SwiftBar
-  open -g "swiftbar://refreshallplugins" 2>/dev/null || true
-  echo "Plugin installed to $SWIFTBAR_DIR. Enable 'Launch at Login' in SwiftBar preferences."
+  [[ -d "$stage/ChargeLimiter.app" ]] || die "App bundle not found after download/build."
+
+  pkill -x ChargeLimiter 2>/dev/null || true
+  if [[ -w /Applications ]]; then
+    rm -rf "$APP" && ditto "$stage/ChargeLimiter.app" "$APP"
+  else
+    sudo rm -rf "$APP" && sudo ditto "$stage/ChargeLimiter.app" "$APP"
+  fi
+  rm -rf "$stage"
+  # Builds are ad-hoc signed; drop the quarantine flag in case the zip came through a browser
+  xattr -dr com.apple.quarantine "$APP" 2>/dev/null || true
+
+  # Start at login
+  mkdir -p "$(dirname "$AGENT")"
+  sed -e "s|@LABEL@|$APP_LABEL|g" -e "s|@APP@|$APP|g" src/charge-limiter-app.plist > "$AGENT"
+  launchctl bootout "gui/$UID" "$AGENT" 2>/dev/null || true
+  launchctl bootstrap "gui/$UID" "$AGENT"
+  echo "Charge Limiter is in the menu bar and starts at login."
 fi
 
 sleep 2

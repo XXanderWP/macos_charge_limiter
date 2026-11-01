@@ -1,8 +1,10 @@
 # macOS Charge Limiter
 
-Limit the maximum battery charge on Apple Silicon MacBooks (for example to 80%) to slow down battery wear. Optionally discharge down to the limit while the adapter is still plugged in. Comes with terminal commands and an optional [SwiftBar](https://github.com/swiftbar/SwiftBar) menu bar plugin.
+Limit the maximum battery charge on Apple Silicon MacBooks (for example to 80%) to slow down battery wear. Optionally discharge down to the limit while the adapter is still plugged in.
 
-No kernel extensions, no background app — just a tiny shell script run by `launchd`.
+- A tiny root daemon run by `launchd` does the charge control. No kernel extensions.
+- A native menu bar app shows live readings and charts and lets you change settings.
+- Terminal commands do the same from the shell.
 
 ## Why another one?
 
@@ -13,43 +15,70 @@ On older firmware Apple Silicon Macs exposed a native 80% limit through the `CHW
 | `CHTE` | `01000000` / `00000000` | pause / allow charging |
 | `CHIE` | `08` / `00` | run from battery with adapter attached / normal |
 
-A root launch daemon checks the battery every 60 seconds (and right away when you change a setting). It pauses charging at the limit and resumes it 5% below.
+The daemon checks the battery every 60 seconds, and right away when you change a setting. It pauses charging at the limit and resumes it 5% below.
 
 ## Requirements
 
-- Apple Silicon Mac (tested on M1 MacBook Air, macOS 26.2)
-- [Homebrew](https://brew.sh) (used to get `smc` from smcFanControl, and SwiftBar)
+- Apple Silicon Mac with macOS 13 or later (tested on M1 MacBook Air, macOS 26.2)
+- [Homebrew](https://brew.sh) (used to get `smc` from smcFanControl)
 - Rosetta 2 (the `smc` binary is x86_64): `softwareupdate --install-rosetta --agree-to-license`
 - An admin account (install asks for your password)
 
 ## Install
 
-One line, with the menu bar plugin:
-
 ```bash
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/XXanderWP/macos_charge_limiter/main/install.sh)" -- --swiftbar
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/XXanderWP/macos_charge_limiter/main/install.sh)"
 ```
 
-Without the plugin, drop `-- --swiftbar`. The script downloads the latest version of the repository to a temporary folder, installs it and cleans up.
+The script downloads the latest version to a temporary folder, installs the daemon, commands and menu bar app, and cleans up. The app is taken from the [latest release](https://github.com/XXanderWP/macos_charge_limiter/releases/latest). If no release can be downloaded, it is built from source, which needs the Command Line Tools (`xcode-select --install`).
 
-Or from a clone:
+Pass options after `--`, for example `bash -c "$(curl …)" -- --limit 85`. Or install from a clone:
 
 ```bash
 git clone https://github.com/XXanderWP/macos_charge_limiter.git
 cd macos_charge_limiter
-./install.sh --swiftbar
+./install.sh
 ```
 
 Options:
 
-- `--swiftbar` also installs SwiftBar and the menu bar plugin
 - `--limit N` sets the initial limit (50–95, default 80)
+- `--build` builds the app from source instead of downloading the release
+- `--no-app` installs only the daemon and terminal commands
 
-The limit is enabled right after install and survives reboots. If you use the menu bar plugin, turn on **Launch at Login** in SwiftBar preferences (or add SwiftBar in System Settings → General → Login Items).
+The limit is enabled right after install and survives reboots. The app starts at login.
 
-To update, run the one-line command again (or `git pull && ./install.sh`). Your settings are kept.
+To update, run the install command again. Your settings are kept.
+
+### About signing
+
+The app isn't signed with an Apple Developer ID. Release builds are ad-hoc signed by GitHub Actions. Files downloaded with `curl` don't get the quarantine flag, so Gatekeeper doesn't block them. The installer also removes the flag, in case the zip came through a browser.
 
 ## Usage
+
+### Menu bar app
+
+Click the icon in the menu bar:
+
+| Icon | Meaning |
+|---|---|
+| leaf | limit on |
+| bolt | limit off |
+| down arrow | discharging to the limit |
+
+The panel shows:
+
+- **Header**: charge ring with the limit mark, current state (holding, charging, discharging, on battery) and time to full or empty
+- **Charge limit**: on/off switch, a 50–95% slider and the *Discharge to limit* switch
+- **Live readings**, updated every second while the panel is open:
+  - adapter profile, e.g. 65 W at 20 V
+  - input voltage, current and power
+  - battery voltage, current and power (positive while charging)
+  - battery temperature
+  - health (current vs. design capacity) and cycle count
+- **Charts**: charge level with the limit line, or input and battery power, for the last 15 minutes, 1 hour or 3 hours. History is kept in memory since the app started.
+
+The app is available in English, Russian and Ukrainian. By default it uses the first supported language from your system language list (System Settings → General → Language & Region) and falls back to English. Use the **Language** menu at the bottom of the panel to override it.
 
 ### Terminal
 
@@ -59,34 +88,10 @@ charge-limit-on 85         # enable and set the limit to 85%
 charge-limit-off           # disable, charge to 100%
 charge-limit-discharge on  # discharge to the limit even when plugged in
 charge-limit-discharge off
-charge-limit-status
+charge-limit-status        # state plus adapter, battery and temperature readings
 ```
 
 None of these need `sudo`.
-
-### Menu bar (SwiftBar)
-
-| Icon | Meaning |
-|---|---|
-| leaf | limit on |
-| bolt | limit off |
-| down arrow | discharging to the limit |
-
-The menu shows the current state, an on/off toggle, a **Charge limit** submenu (50–95%) and a **Discharge to limit** toggle.
-
-It also shows electrical readings from `ioreg`, refreshed every 30 seconds and each time the menu opens. `charge-limit-status` prints the same:
-
-- **Adapter**: negotiated USB-C power profile, e.g. `65 W (20 V)` (only when plugged in)
-- **Input**: actual voltage, current and power drawn from the adapter (only when plugged in)
-- **Battery**: battery voltage, current and power, positive when charging, negative when discharging
-- **Temperature**: battery temperature
-
-The menu is available in English, Russian and Ukrainian. It uses the first supported language from your system language list (System Settings → General → Language & Region) and falls back to English. To force a language:
-
-```bash
-echo uk > ~/.charge-limit/lang   # en, ru or uk
-rm ~/.charge-limit/lang          # back to the system language
-```
 
 ## How it works
 
@@ -95,17 +100,26 @@ rm ~/.charge-limit/lang          # back to the system language
 ├── on          # present = limit enabled
 ├── max         # limit in percent (default 80)
 ├── discharge   # present = discharge down to the limit
-└── lang        # optional menu language override
+└── lang        # optional language override (en, ru, uk)
 ```
 
 | Path | What |
 |---|---|
 | `/usr/local/bin/smc` | SMC tool from smcFanControl |
 | `/usr/local/bin/charge-limit-*` | daemon and commands |
-| `/Library/LaunchDaemons/io.github.xxanderwp.charge-limiter.plist` | launchd job (root) |
-| `~/.swiftbar/charge-limit.30s.sh` | menu bar plugin |
+| `/Library/LaunchDaemons/io.github.xxanderwp.charge-limiter.plist` | daemon launchd job (root) |
+| `/Applications/ChargeLimiter.app` | menu bar app |
+| `~/Library/LaunchAgents/io.github.xxanderwp.charge-limiter.app.plist` | starts the app at login |
 
-The commands only create or delete files in `~/.charge-limit`. The daemon watches this folder, runs as root and writes the SMC keys.
+The app and the commands only create or delete files in `~/.charge-limit`. The daemon watches this folder, runs as root and writes the SMC keys. The app reads battery data and the SMC state directly through IOKit, without root.
+
+### Building the app
+
+```bash
+app/build.sh            # -> build/ChargeLimiter.app
+```
+
+Pushing a `v*` tag runs [.github/workflows/release.yml](.github/workflows/release.yml), which builds the app and publishes `ChargeLimiter.zip` as a release.
 
 ## Limitations
 
@@ -120,14 +134,13 @@ The commands only create or delete files in `~/.charge-limit`. The daemon watche
 ./uninstall.sh                # add --keep-config to keep ~/.charge-limit
 ```
 
-This removes the daemon, commands and plugin and restores normal charging. SwiftBar and smcFanControl stay installed. Remove them with `brew uninstall --cask swiftbar smcfancontrol`.
+This removes the daemon, commands and app and restores normal charging. smcFanControl stays installed. Remove it with `brew uninstall --cask smcfancontrol`.
 
 ## Credits
 
 - [geokal's gist](https://gist.github.com/geokal/b0a9c53f94e8751f7a911834e3b85382) for the original `CHWA` approach
 - [actuallymentor/battery](https://github.com/actuallymentor/battery) for documenting `CHTE` / `CHIE`
 - [smcFanControl](https://github.com/hholtmann/smcFanControl) for `smc`
-- [SwiftBar](https://github.com/swiftbar/SwiftBar)
 
 ## License
 

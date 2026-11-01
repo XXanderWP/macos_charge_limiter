@@ -26,11 +26,20 @@ fi
 
 sudo rm -f "$BIN"/charge-limit-{daemon,on,off,status,discharge} "$BIN/smc" /var/run/charge-limit.max
 
+# Menu bar app
+APP_AGENT="$HOME/Library/LaunchAgents/io.github.xxanderwp.charge-limiter.app.plist"
+launchctl bootout "gui/$UID" "$APP_AGENT" 2>/dev/null || true
+rm -f "$APP_AGENT"
+pkill -x ChargeLimiter 2>/dev/null || true
+if [[ -d /Applications/ChargeLimiter.app ]]; then
+  rm -rf /Applications/ChargeLimiter.app 2>/dev/null || sudo rm -rf /Applications/ChargeLimiter.app
+fi
+
+# SwiftBar plugin from older versions
 plugin_dir=$(defaults read com.ameba.SwiftBar PluginDirectory 2>/dev/null || echo "$HOME/.swiftbar")
-rm -f "${plugin_dir/#\~/$HOME}/charge-limit.30s.sh"
+rm -f "${plugin_dir/#\~/$HOME}"/charge-limit*.sh
 
 [[ $KEEP_CONFIG -eq 1 ]] || rm -rf "$CONFIG_DIR"
 
 echo "Charge limiter removed, charging restored to normal."
-echo "SwiftBar and smcFanControl were left installed; remove them with:"
-echo "  brew uninstall --cask swiftbar smcfancontrol"
+echo "smcFanControl was left installed; remove it with: brew uninstall --cask smcfancontrol"
