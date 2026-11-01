@@ -64,10 +64,11 @@ None of these need `sudo`.
 
 The menu shows the current state, an on/off toggle, a **Charge limit** submenu (50–95%) and a **Discharge to limit** toggle.
 
-The menu follows your primary system language (English or Russian). To force a language:
+The menu is available in English, Russian and Ukrainian. It uses the first supported language from your system language list (System Settings → General → Language & Region) and falls back to English. To force a language:
 
 ```bash
-echo ru > ~/.charge-limit/lang   # or: echo en > ~/.charge-limit/lang
+echo uk > ~/.charge-limit/lang   # en, ru or uk
+rm ~/.charge-limit/lang          # back to the system language
 ```
 
 ## How it works
