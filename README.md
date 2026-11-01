@@ -6,6 +6,10 @@ Limit the maximum battery charge on Apple Silicon MacBooks (for example to 80%) 
 - A native menu bar app shows live readings and charts and lets you change settings.
 - Terminal commands do the same from the shell.
 
+<p align="center">
+  <img src="docs/screenshot.png" width="343" alt="Charge Limiter menu bar panel: charge ring, limit controls, live adapter and battery readings, charge chart">
+</p>
+
 ## Why another one?
 
 On older firmware Apple Silicon Macs exposed a native 80% limit through the `CHWA` SMC key ([this gist](https://gist.github.com/geokal/b0a9c53f94e8751f7a911834e3b85382) describes it). Since macOS 15 the key is gone. This project uses the keys that still exist:
