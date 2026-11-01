@@ -74,6 +74,13 @@ None of these need `sudo`.
 
 The menu shows the current state, an on/off toggle, a **Charge limit** submenu (50–95%) and a **Discharge to limit** toggle.
 
+It also shows live electrical readings (from `ioreg`, refreshed when the menu opens). `charge-limit-status` prints the same:
+
+- **Adapter**: negotiated USB-C power profile, e.g. `65 W (20 V)` (only when plugged in)
+- **Input**: actual voltage, current and power drawn from the adapter (only when plugged in)
+- **Battery**: battery voltage, current and power, positive when charging, negative when discharging
+- **Temperature**: battery temperature
+
 The menu is available in English, Russian and Ukrainian. It uses the first supported language from your system language list (System Settings → General → Language & Region) and falls back to English. To force a language:
 
 ```bash

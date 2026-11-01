@@ -11,3 +11,24 @@ if [[ "$chie" != "bytes 00" ]]; then echo "Charging: discharging to limit"
 elif [[ "$chte" == "bytes 00 00 00 00" ]]; then echo "Charging: allowed"
 else echo "Charging: inhibited"; fi
 pmset -g batt | grep -Eo '[0-9]+%.*'
+
+# Electrical readings from the battery controller (mV, mA, mW)
+io=$(ioreg -rn AppleSmartBattery -a)
+io_val() { plutil -extract "0.$1" raw -o - - <<<"$io" 2>/dev/null; }
+fmt() { awk -v x="$1" -v d="$2" -v u="$3" 'BEGIN { printf "%." d "f %s", x / 1000, u }'; }
+if [[ "$(io_val ExternalConnected)" == "true" ]]; then
+  watts=$(io_val AdapterDetails.Watts); avolt=$(io_val AdapterDetails.AdapterVoltage)
+  [[ -n "$watts" ]] && echo "Adapter: $watts W ($(fmt "$avolt" 0 V))"
+  vin=$(io_val PowerTelemetryData.SystemVoltageIn); iin=$(io_val PowerTelemetryData.SystemCurrentIn)
+  pin=$(io_val PowerTelemetryData.SystemPowerIn)
+  [[ -n "$vin" ]] && echo "Input: $(fmt "$vin" 2 V), $(fmt "$iin" 2 A), $(fmt "$pin" 1 W)"
+fi
+bv=$(io_val Voltage); ba=$(io_val Amperage)
+if [[ -n "$bv" && -n "$ba" ]]; then
+  ba=$(( ba ))  # wraps unsigned 64-bit values to negative
+  bw=$(( bv * ba / 1000 ))
+  sign=""; (( ba > 0 )) && sign="+"
+  echo "Battery: $(fmt "$bv" 2 V), $sign$(fmt "$ba" 2 A), $sign$(fmt "$bw" 1 W)"
+fi
+temp=$(io_val Temperature)
+[[ -n "$temp" ]] && echo "Temperature: $(awk -v t="$temp" 'BEGIN { printf "%.1f", t / 100 }') °C"

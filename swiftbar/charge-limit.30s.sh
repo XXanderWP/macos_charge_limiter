@@ -6,6 +6,7 @@
 # <swiftbar.hideLastUpdated>true</swiftbar.hideLastUpdated>
 # <swiftbar.hideDisablePlugin>true</swiftbar.hideDisablePlugin>
 # <swiftbar.hideSwiftBar>true</swiftbar.hideSwiftBar>
+# <swiftbar.refreshOnOpen>true</swiftbar.refreshOnOpen>
 BIN=/usr/local/bin
 DIR="$HOME/.charge-limit"
 FLAG="$DIR/on"
@@ -28,6 +29,7 @@ case "$LANG_CODE" in
     T_ALLOWED="Зарядка разрешена"; T_HELD="Зарядка остановлена (держу ${MIN}–${MAX}%)"
     T_POWER="Питание"; T_AC="сеть"; T_BATT="батарея"
     T_DISABLE="Выключить лимит (зарядить до 100%)"; T_ENABLE="Включить лимит ${MAX}%"
+    T_ADAPTER="Адаптер"; T_INPUT="Вход"; T_BATTERY="Батарея"; T_TEMP="Температура"
     T_LEVEL="Порог зарядки"; T_DTOGGLE="Разряжать до порога" ;;
   uk*)
     T_ON="Ліміт ${MAX}%: увімкнено"; T_OFF="Ліміт: вимкнено"
@@ -35,6 +37,7 @@ case "$LANG_CODE" in
     T_ALLOWED="Заряджання дозволено"; T_HELD="Заряджання призупинено (тримаю ${MIN}–${MAX}%)"
     T_POWER="Живлення"; T_AC="мережа"; T_BATT="батарея"
     T_DISABLE="Вимкнути ліміт (зарядити до 100%)"; T_ENABLE="Увімкнути ліміт ${MAX}%"
+    T_ADAPTER="Адаптер"; T_INPUT="Вхід"; T_BATTERY="Батарея"; T_TEMP="Температура"
     T_LEVEL="Поріг заряджання"; T_DTOGGLE="Розряджати до порога" ;;
   *)
     T_ON="Limit ${MAX}%: on"; T_OFF="Limit: off"
@@ -42,6 +45,7 @@ case "$LANG_CODE" in
     T_ALLOWED="Charging allowed"; T_HELD="Charging paused (holding ${MIN}–${MAX}%)"
     T_POWER="Power"; T_AC="AC adapter"; T_BATT="battery"
     T_DISABLE="Disable limit (charge to 100%)"; T_ENABLE="Enable ${MAX}% limit"
+    T_ADAPTER="Adapter"; T_INPUT="Input"; T_BATTERY="Battery"; T_TEMP="Temperature"
     T_LEVEL="Charge limit"; T_DTOGGLE="Discharge to limit" ;;
 esac
 
@@ -70,6 +74,28 @@ else
   echo "$T_HELD"
 fi
 if grep -q "'AC Power'" <<<"$batt"; then echo "$T_POWER: $T_AC"; else echo "$T_POWER: $T_BATT"; fi
+
+# Electrical readings from the battery controller (mV, mA, mW)
+io=$(ioreg -rn AppleSmartBattery -a)
+io_val() { plutil -extract "0.$1" raw -o - - <<<"$io" 2>/dev/null; }
+fmt() { awk -v x="$1" -v d="$2" -v u="$3" 'BEGIN { printf "%." d "f %s", x / 1000, u }'; }
+echo "---"
+if [[ "$(io_val ExternalConnected)" == "true" ]]; then
+  watts=$(io_val AdapterDetails.Watts); avolt=$(io_val AdapterDetails.AdapterVoltage)
+  [[ -n "$watts" ]] && echo "$T_ADAPTER: $watts W ($(fmt "$avolt" 0 V)) | sfimage=powerplug"
+  vin=$(io_val PowerTelemetryData.SystemVoltageIn); iin=$(io_val PowerTelemetryData.SystemCurrentIn)
+  pin=$(io_val PowerTelemetryData.SystemPowerIn)
+  [[ -n "$vin" ]] && echo "$T_INPUT: $(fmt "$vin" 2 V) · $(fmt "$iin" 2 A) · $(fmt "$pin" 1 W) | sfimage=bolt"
+fi
+bv=$(io_val Voltage); ba=$(io_val Amperage)
+if [[ -n "$bv" && -n "$ba" ]]; then
+  ba=$(( ba ))  # wraps unsigned 64-bit values to negative
+  bw=$(( bv * ba / 1000 ))
+  sign=""; (( ba > 0 )) && sign="+"
+  echo "$T_BATTERY: $(fmt "$bv" 2 V) · $sign$(fmt "$ba" 2 A) · $sign$(fmt "$bw" 1 W) | sfimage=battery.75percent"
+fi
+temp=$(io_val Temperature)
+[[ -n "$temp" ]] && echo "$T_TEMP: $(awk -v t="$temp" 'BEGIN { printf "%.1f", t / 100 }') °C | sfimage=thermometer.medium"
 echo "---"
 if [[ -f "$FLAG" ]]; then
   echo "$T_DISABLE | bash=$BIN/charge-limit-off terminal=false refresh=true"
